@@ -62,6 +62,7 @@ func (w *Watcher) pollAll(ctx context.Context) {
 	// Prune expired watches
 	if n := w.state.PruneExpired(); n > 0 {
 		log.Printf("[watcher] pruned %d expired watch(es)", n)
+		w.state.Save()
 	}
 
 	watches := w.state.GetActiveWatches()
@@ -97,13 +98,7 @@ func (w *Watcher) pollOne(ctx context.Context, entry *WatchEntry) {
 	}
 
 	diff := w.state.ComputeDiff(entry, rooms)
-
-	if entry.FirstPoll {
-		// FirstPoll was just cleared by ComputeDiff, this was the initial snapshot
-		availCount := len(entry.PrevAvailable)
-		log.Printf("[watcher] %s initial snapshot: %d available rooms", entry.WatchKey(), availCount)
-		return
-	}
+	w.state.Save()
 
 	if !diff.HasChanges() {
 		return

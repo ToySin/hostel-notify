@@ -1,0 +1,11 @@
+{
+  "watches": {
+    "2026-04-17:2": {
+      "date": "2026-04-17",
+      "nights": 2,
+      "channel_id": "1485933351494750378",
+      "prev_available": {},
+      "first_poll": false
+    }
+  }
+}

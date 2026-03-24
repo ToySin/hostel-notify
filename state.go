@@ -1,20 +1,24 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
 
 // WatchEntry represents a date being watched for availability changes.
 type WatchEntry struct {
-	Date      string // "2026-04-05"
-	Nights    int    // 1 = 1박2일, 2 = 2박3일, ...
-	ChannelID string // Discord channel to notify
+	Date      string `json:"date"`       // "2026-04-05"
+	Nights    int    `json:"nights"`     // 1 = 1박2일, 2 = 2박3일, ...
+	ChannelID string `json:"channel_id"` // Discord channel to notify
 
 	// Previous snapshot of available room SIDs → Room
-	PrevAvailable map[string]Room
-	FirstPoll     bool // true if never polled yet
+	PrevAvailable map[string]Room `json:"prev_available"`
+	FirstPoll     bool            `json:"first_poll"` // true if never polled yet
 }
 
 // WatchKey returns a unique key for this watch entry.
@@ -38,16 +42,95 @@ func (d Diff) HasChanges() bool {
 	return len(d.Added) > 0 || len(d.Removed) > 0
 }
 
+// stateData is the JSON-serializable form of State.
+type stateData struct {
+	Watches map[string]*WatchEntry `json:"watches"`
+}
+
 // State manages all active watch entries (thread-safe).
 type State struct {
-	mu      sync.RWMutex
-	watches map[string]*WatchEntry // key = "date:nights"
+	mu       sync.RWMutex
+	watches  map[string]*WatchEntry // key = "date:nights"
+	filePath string
 }
 
 // NewState creates an empty state.
-func NewState() *State {
+func NewState(filePath string) *State {
 	return &State{
-		watches: make(map[string]*WatchEntry),
+		watches:  make(map[string]*WatchEntry),
+		filePath: filePath,
+	}
+}
+
+// Load reads state from the JSON file. Silently starts fresh if file doesn't exist.
+func (s *State) Load() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := os.ReadFile(s.filePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("[state] ⚠️  state.json 읽기 실패: %v", err)
+		}
+		return
+	}
+
+	var sd stateData
+	if err := json.Unmarshal(data, &sd); err != nil {
+		log.Printf("[state] ⚠️  state.json 파싱 실패: %v", err)
+		return
+	}
+
+	if sd.Watches == nil {
+		return
+	}
+
+	// Filter out expired entries on load
+	kst, _ := time.LoadLocation("Asia/Seoul")
+	today := time.Now().In(kst).Format("2006-01-02")
+
+	loaded := 0
+	expired := 0
+	for key, w := range sd.Watches {
+		if w.Date < today {
+			expired++
+			continue
+		}
+		s.watches[key] = w
+		loaded++
+	}
+
+	if loaded > 0 || expired > 0 {
+		log.Printf("[state] 📂 state.json 로드: %d개 복원, %d개 만료 제거", loaded, expired)
+	}
+}
+
+// Save writes the current state to the JSON file.
+func (s *State) Save() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if len(s.watches) == 0 {
+		// Clean up file if nothing to save
+		os.Remove(s.filePath)
+		return
+	}
+
+	sd := stateData{Watches: s.watches}
+	data, err := json.MarshalIndent(sd, "", "  ")
+	if err != nil {
+		log.Printf("[state] ⚠️  state.json 직렬화 실패: %v", err)
+		return
+	}
+
+	dir := filepath.Dir(s.filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Printf("[state] ⚠️  디렉토리 생성 실패: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(s.filePath, data, 0644); err != nil {
+		log.Printf("[state] ⚠️  state.json 저장 실패: %v", err)
 	}
 }
 

@@ -18,12 +18,12 @@ const (
 
 // Room represents a single room entry from the reservation page.
 type Room struct {
-	Name      string // e.g. "2인실(트윈)"
-	Size      string // e.g. "26.44m2"
-	Capacity  string // e.g. "2명"
-	Price     string // e.g. "60,000원"
-	Available bool   // true if bookable
-	RoomSid   string // room ID from writeFunc (only when available)
+	Name      string `json:"name"`      // e.g. "2인실(트윈)"
+	Size      string `json:"size"`      // e.g. "26.44m2"
+	Capacity  string `json:"capacity"`  // e.g. "2명"
+	Price     string `json:"price"`     // e.g. "60,000원"
+	Available bool   `json:"available"` // true if bookable
+	RoomSid   string `json:"room_sid"`  // room ID from writeFunc (only when available)
 }
 
 // Key returns a unique identifier for this room (using RoomSid if available, else name+index).

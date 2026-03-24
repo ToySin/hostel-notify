@@ -9,6 +9,14 @@ import (
 	"syscall"
 )
 
+var stateFile = "state.json"
+
+func init() {
+	if v := os.Getenv("STATE_FILE"); v != "" {
+		stateFile = v
+	}
+}
+
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmsgprefix)
 	log.SetPrefix("[hostel] ")
@@ -20,7 +28,8 @@ func main() {
 
 	log.Println("🏨 선운산유스호스텔 예약 알림봇 시작")
 
-	state := NewState()
+	state := NewState(stateFile)
+	state.Load()
 
 	// Restrict to specific channels (comma-separated IDs, env overrides default)
 	channelStr := os.Getenv("DISCORD_CHANNEL_IDS")
@@ -54,5 +63,8 @@ func main() {
 
 	log.Printf("🛑 종료 신호 수신: %v", sig)
 	cancel()
+
+	// Save state before exit
+	state.Save()
 	log.Println("👋 정상 종료")
 }

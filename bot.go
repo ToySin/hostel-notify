@@ -136,6 +136,7 @@ func (b *Bot) handleWatch(s *discordgo.Session, m *discordgo.MessageCreate, args
 	// Fetch current state immediately and show it
 	rooms, err := FetchRooms(date, nights)
 	if err != nil {
+		b.state.Save()
 		b.reply(s, m, fmt.Sprintf("❌ 초기 조회 실패: %v\n감시는 계속됩니다. 변경사항이 생기면 알려드릴게요.", err))
 		return
 	}
@@ -145,6 +146,7 @@ func (b *Bot) handleWatch(s *discordgo.Session, m *discordgo.MessageCreate, args
 	if entry != nil {
 		b.state.ComputeDiff(entry, rooms)
 	}
+	b.state.Save()
 
 	// Show current availability
 	var available int
@@ -190,6 +192,7 @@ func (b *Bot) handleUnwatch(s *discordgo.Session, m *discordgo.MessageCreate, ar
 	}
 
 	if b.state.RemoveWatch(date, nights) {
+		b.state.Save()
 		b.reply(s, m, fmt.Sprintf("🔕 **%s** (%d박) 감시를 해제했습니다.", date, nights))
 	} else {
 		b.reply(s, m, fmt.Sprintf("**%s** (%d박)은 감시 목록에 없습니다.", date, nights))
