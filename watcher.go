@@ -97,6 +97,11 @@ func (w *Watcher) pollOne(ctx context.Context, entry *WatchEntry) {
 		return
 	}
 
+	// Site returns 0 rooms outside operating hours (09:00-22:00) — skip to avoid false alerts
+	if len(rooms) == 0 {
+		return
+	}
+
 	diff := w.state.ComputeDiff(entry, rooms)
 	w.state.Save()
 
