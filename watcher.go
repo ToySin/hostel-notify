@@ -49,6 +49,8 @@ func (w *Watcher) Run(ctx context.Context) {
 		case <-timer.C:
 		}
 
+		w.probeNextMonth(ctx)
+
 		// Skip if nothing to watch
 		if len(w.state.GetActiveWatches()) == 0 {
 			continue
@@ -114,6 +116,50 @@ func (w *Watcher) pollOne(ctx context.Context, entry *WatchEntry) {
 
 	msg := formatDiffMessage(entry, diff)
 	w.bot.SendToChannel(entry.ChannelID, msg)
+}
+
+func (w *Watcher) probeNextMonth(ctx context.Context) {
+	month := w.state.NextProbeMonth()
+	probeDate := month + "-01"
+
+	rooms, err := FetchRooms(probeDate, 1)
+	if err != nil {
+		log.Printf("[watcher] month probe %s error: %v", month, err)
+		return
+	}
+
+	if len(rooms) == 0 {
+		return // outside operating hours or not yet open
+	}
+
+	// Month is open!
+	log.Printf("[watcher] 🎉 %s 예약 오픈 감지! (%d rooms)", month, len(rooms))
+	w.state.SetLastOpenMonth(month)
+	w.state.Save()
+
+	// Count available rooms
+	var available int
+	for _, r := range rooms {
+		if r.Available {
+			available++
+		}
+	}
+
+	msg := fmt.Sprintf("🎉 **%s 예약이 오픈되었습니다!**\n\n"+
+		"📊 전체 %d개 | 예약가능 %d개\n"+
+		"🔗 %s",
+		month, len(rooms), available, BuildReservationURL(probeDate, 1))
+
+	// Notify all active watch channels
+	channels := w.state.GetWatchChannels()
+	if len(channels) == 0 {
+		// Fallback: use default channels from bot
+		channels = w.bot.DefaultChannels()
+	}
+
+	for _, ch := range channels {
+		w.bot.SendToChannel(ch, msg)
+	}
 }
 
 func formatDiffMessage(entry *WatchEntry, diff Diff) string {

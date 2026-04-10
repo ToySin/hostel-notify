@@ -44,14 +44,16 @@ func (d Diff) HasChanges() bool {
 
 // stateData is the JSON-serializable form of State.
 type stateData struct {
-	Watches map[string]*WatchEntry `json:"watches"`
+	Watches       map[string]*WatchEntry `json:"watches"`
+	LastOpenMonth string                 `json:"last_open_month,omitempty"` // e.g. "2026-05"
 }
 
 // State manages all active watch entries (thread-safe).
 type State struct {
-	mu       sync.RWMutex
-	watches  map[string]*WatchEntry // key = "date:nights"
-	filePath string
+	mu            sync.RWMutex
+	watches       map[string]*WatchEntry // key = "date:nights"
+	lastOpenMonth string                 // e.g. "2026-05"
+	filePath      string
 }
 
 // NewState creates an empty state.
@@ -103,6 +105,11 @@ func (s *State) Load() {
 	if loaded > 0 || expired > 0 {
 		log.Printf("[state] 📂 state.json 로드: %d개 복원, %d개 만료 제거", loaded, expired)
 	}
+
+	if sd.LastOpenMonth != "" {
+		s.lastOpenMonth = sd.LastOpenMonth
+		log.Printf("[state] 📂 마지막 오픈 월: %s", s.lastOpenMonth)
+	}
 }
 
 // Save writes the current state to the JSON file.
@@ -110,13 +117,13 @@ func (s *State) Save() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if len(s.watches) == 0 {
+	if len(s.watches) == 0 && s.lastOpenMonth == "" {
 		// Clean up file if nothing to save
 		os.Remove(s.filePath)
 		return
 	}
 
-	sd := stateData{Watches: s.watches}
+	sd := stateData{Watches: s.watches, LastOpenMonth: s.lastOpenMonth}
 	data, err := json.MarshalIndent(sd, "", "  ")
 	if err != nil {
 		log.Printf("[state] ⚠️  state.json 직렬화 실패: %v", err)
@@ -219,6 +226,58 @@ func (s *State) PruneExpired() int {
 		}
 	}
 	return count
+}
+
+// NextProbeMonth returns the month to probe for reservation opening.
+// If LastOpenMonth is set, returns the following month.
+// Otherwise defaults to current month + 2 (since current+1 is assumed open).
+func (s *State) NextProbeMonth() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.lastOpenMonth != "" {
+		return addMonth(s.lastOpenMonth)
+	}
+
+	kst, _ := time.LoadLocation("Asia/Seoul")
+	now := time.Now().In(kst)
+	// Default: assume current month + 1 is the last open month
+	next := now.AddDate(0, 2, 0)
+	return next.Format("2006-01")
+}
+
+// SetLastOpenMonth updates the last confirmed open month.
+func (s *State) SetLastOpenMonth(month string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastOpenMonth = month
+}
+
+// GetWatchChannels returns unique channel IDs from all active watches.
+func (s *State) GetWatchChannels() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	seen := make(map[string]bool)
+	for _, w := range s.watches {
+		if w.ChannelID != "" {
+			seen[w.ChannelID] = true
+		}
+	}
+	channels := make([]string, 0, len(seen))
+	for ch := range seen {
+		channels = append(channels, ch)
+	}
+	return channels
+}
+
+// addMonth takes "2026-05" and returns "2026-06".
+func addMonth(ym string) string {
+	t, err := time.Parse("2006-01", ym)
+	if err != nil {
+		return ym
+	}
+	return t.AddDate(0, 1, 0).Format("2006-01")
 }
 
 // ComputeDiff compares the current available rooms with the previous snapshot

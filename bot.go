@@ -68,6 +68,15 @@ func (b *Bot) Session() *discordgo.Session {
 	return b.session
 }
 
+// DefaultChannels returns the configured allowed channel IDs.
+func (b *Bot) DefaultChannels() []string {
+	channels := make([]string, 0, len(b.channelIDs))
+	for ch := range b.channelIDs {
+		channels = append(channels, ch)
+	}
+	return channels
+}
+
 func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.ID == s.State.User.ID {
 		return
