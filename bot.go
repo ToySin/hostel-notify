@@ -210,13 +210,12 @@ func (b *Bot) handleUnwatch(s *discordgo.Session, m *discordgo.MessageCreate, ar
 
 func (b *Bot) handleList(s *discordgo.Session, m *discordgo.MessageCreate) {
 	watches := b.state.ListWatches()
-	if len(watches) == 0 {
-		b.reply(s, m, "현재 감시 중인 날짜가 없습니다. `!watch YYYY-MM-DD`로 추가하세요.")
-		return
-	}
 
 	var sb strings.Builder
-	sb.WriteString("📋 **감시 목록**\n")
+	if len(watches) == 0 {
+		sb.WriteString("현재 감시 중인 날짜가 없습니다. `!watch YYYY-MM-DD`로 추가하세요.\n")
+	} else {
+		sb.WriteString("📋 **감시 목록**\n")
 	for _, w := range watches {
 		status := "🔍 폴링 중"
 		if w.FirstPoll {
@@ -225,7 +224,10 @@ func (b *Bot) handleList(s *discordgo.Session, m *discordgo.MessageCreate) {
 		availCount := len(w.PrevAvailable)
 		sb.WriteString(fmt.Sprintf("• **%s** (%s) — %s (예약가능 %d개)\n",
 			w.Date, w.NightsLabel(), status, availCount))
+		}
 	}
+
+	sb.WriteString(fmt.Sprintf("\n📅 다음 오픈 감시: **%s** (매 폴링마다 자동 확인)", b.state.NextProbeMonth()))
 	b.reply(s, m, sb.String())
 }
 
